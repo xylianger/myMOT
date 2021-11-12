@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import _init_paths
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+#os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'
 import os.path as osp
 import cv2
 import logging

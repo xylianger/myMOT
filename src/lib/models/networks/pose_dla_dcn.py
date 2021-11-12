@@ -654,6 +654,54 @@ class NONLocalBlock2D(_NonLocalBlockND):
                                               bn_layer=bn_layer)
 
 
+class Channel_Attention(nn.Module):
+
+    def __init__(self, channel, r):
+        super(Channel_Attention, self).__init__()
+
+        self.__avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.__max_pool = nn.AdaptiveMaxPool2d((1, 1))
+
+        self.__fc = nn.Sequential(
+            nn.Conv2d(channel, channel//r, 1, bias=False),
+            nn.ReLU(True),
+            nn.Conv2d(channel//r, channel, 1, bias=False),
+        )
+        self.__sigmoid = nn.Sigmoid()
+
+
+    def forward(self, x):
+        y1 = self.__avg_pool(x)
+        y1 = self.__fc(y1)
+
+        y2 = self.__max_pool(x)
+        y2 = self.__fc(y2)
+
+        y = self.__sigmoid(y1+y2)
+        return x * y
+
+
+class Spartial_Attention(nn.Module):
+
+    def __init__(self, kernel_size):
+        super(Spartial_Attention, self).__init__()
+
+        assert kernel_size % 2 == 1, "kernel_size = {}".format(kernel_size)
+        padding = (kernel_size - 1) // 2
+
+        self.__layer = nn.Sequential(
+            nn.Conv2d(2, 1, kernel_size=kernel_size, padding=padding),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        avg_mask = torch.mean(x, dim=1, keepdim=True)
+        max_mask, _ = torch.max(x, dim=1, keepdim=True)
+        mask = torch.cat([avg_mask, max_mask], dim=1)
+
+        mask = self.__layer(mask)
+        return x * mask
+
 class Net(nn.Module):
     def __init__(self, dlaseg, opt):
         super(Net, self).__init__()
@@ -667,7 +715,7 @@ class Net(nn.Module):
         self.id_sptaial = nn.Conv2d(2, 1, (3, 3), stride=1, padding=1)
         self.id_activate = nn.Sigmoid()
         self.id_feature = nn.Linear(20 * 20 * 128, opt.reid_dim, bias=True)
-        self.feature_activate = nn.Sigmoid()
+        #self.feature_activate = nn.Sigmoid()
 
         # self.feature = nn.Linear(2048,opt.reid_dim,bias=True)
 
@@ -730,14 +778,14 @@ class Net(nn.Module):
             ids = output['id']
 
             align_feature = self.roi_align(ids, gt_rois)
-            '''avgout = torch.mean(align_feature, 1, True)
+            avgout = torch.mean(align_feature, 1, True)
             max_out, _ = torch.max(align_feature, 1, True)
             x = torch.cat([avgout, max_out], 1)
             x = self.id_sptaial(x)
             attention = self.id_activate(x)
 
             #
-            align_feature = align_feature * attention'''
+            align_feature = align_feature * attention
             # print(align_feature.size())
             align_feature = align_feature.view(-1, 20 * 20 * 128)
             # print(align_feature.size())
@@ -781,14 +829,15 @@ class Net(nn.Module):
             # print(rois[0])
 
             # print(align_feature.size())
-            '''if align_feature.size(0) != 0:
+            if align_feature.size(0) != 0:
                 avgout = torch.mean(align_feature, 1, True)
                 # print(avgout)
                 max_out, _ = torch.max(align_feature, 1, True)
                 x = torch.cat([avgout, max_out], 1)
                 x = self.id_sptaial(x)
                 attention = self.id_activate(x)
-                shows_a = attention[0].cpu().numpy()
+                align_feature = align_feature * attention
+                '''shows_a = attention[0].cpu().numpy()
 
                 shows_b = max_out[0].cpu().numpy()
                 
@@ -804,38 +853,16 @@ class Net(nn.Module):
                 plt.colorbar()
                 plt.show()'''
                 #
-                #align_feature = align_feature * attention
+
 
             align_feature = align_feature.view(-1, 20 * 20 * 128)
 
             id_feature = self.id_feature(align_feature)
             #id_feature = self.feature_activate(id_feature)
-            #id_feature = self.feature_activate(id_feature)
-
-            # fc1 = self.fc1(align_feature)
-            # id_feature = self.id_feature(align_feature)
-            # align_feature = F.normalize(align_feature, 1)
             dets = self.post_process(dets, meta)
             dets = self.merge_outputs([dets])[1]
             remain_inds = dets[:, 4] > self.opt.conf_thres
             dets = dets[remain_inds]
-            # print(dets[0])
-            # print('*' * 80)
-            # print(dets.shape[0], dets[:,4])
-            # print(roi_dets[:,:4])
-            # print("*"*80)
-
-            # print(dets[:,:4])
-            # print("++++++++++++++++++++++" * 80)
-            # print(meta['c'][0]*2)
-            '''print(dets[:, :4])
-            dets[:,0] = np.clip(dets[:,0],1,meta['c'][0]*2)
-            dets[:,1] = np.clip(dets[:,1],1,meta['c'][1]*2)
-            dets[:,2] = np.clip(dets[:,2],1,meta['c'][0]*2)
-            dets[:,3] = np.clip(dets[:,3],1,meta['c'][1]*2)
-            print(dets[:,:4])'''
-
-            # output['id'] = ids
             out['id_feature'] = id_feature.detach().cpu().numpy()
             # print(id_feature.shape)
             out['dets'] = dets

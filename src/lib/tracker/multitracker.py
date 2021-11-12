@@ -284,31 +284,17 @@ class JDETracker(object):
         STrack.multi_predict(strack_pool)
         #dists = matching.iou_distance(strack_pool, detections)
         dists = matching.embedding_distance(strack_pool, detections)
-        # print(dists)
-        #dists = matching.fuse_motion(self.kalman_filter, dists, strack_pool, detections)
+        '''
         iou = matching.iou_distance(strack_pool, detections)
         idxs = iou < 0.05
-        #iou[idxs] = 0
-        dists[idxs] = np.inf
+        iou[idxs] = 0
+        dists[idxs] = np.inf'''
+        dists = matching.fuse_motion(self.kalman_filter, dists, strack_pool, detections)
+        matches, u_track, u_detection = matching.linear_assignment(dists, thresh=0.5)  #sphere 0.4
 
-        # dists = dists*10 + iouiou
-        # dists = matching.bbox_overlaps_giou(strack_pool, detections)
-        # dists = matching.gate_cost_matrix(self.kalman_filter, dists, strack_pool, detections)
-
-        # print(dists[:15,:15])
-        matches, u_track, u_detection = matching.linear_assignment(dists, thresh=0.4)  #sphere 0.4
-        '''print("first " + "*"*80)
-        print(dists.shape)
-        print(matches.shape[0])'''
         for itracked, idet in matches:
             track = strack_pool[itracked]
             det = detections[idet]
-            if dists[itracked,idet] > 0.3:
-
-                '''print("Track:", track.tlwh)
-                print("Det",det.tlwh)
-                print(dists[itracked,idet])'''
-
             if track.state == TrackState.Tracked:
                 track.update(detections[idet], self.frame_id)
                 activated_starcks.append(track)
@@ -330,7 +316,7 @@ class JDETracker(object):
         dists = matching.iou_distance(r_tracked_stracks, detections)
         # dists = matching.fuse_motion(self.kalman_filter, dists, r_tracked_stracks, detections)
         # print(dists)
-        matches, u_track, u_detection = matching.linear_assignment(dists, thresh=0.7)
+        matches, u_track, u_detection = matching.linear_assignment(dists, thresh=0.4)
 
         for itracked, idet in matches:
             track = r_tracked_stracks[itracked]
